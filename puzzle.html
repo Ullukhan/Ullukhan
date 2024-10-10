@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Puzzle Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+        #game-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        canvas, img {
+            border: 2px solid #ddd;
+            margin: 10px;
+        }
+        #puzzle-tray {
+            border: 2px solid #ccc;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .puzzle-piece {
+            border: 1px solid #333;
+            cursor: move;
+            margin: 5px;
+        }
+        #status {
+            font-size: 1.2em;
+            color: green;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Image Puzzle Game</h1>
+    <input type="file" id="image-upload" accept="image/*">
+    <div id="game-container">
+        <div>
+            <h2>Original Image</h2>
+            <img id="original-image" width="200" height="200" alt="Original Image"/>
+        </div>
+        <div>
+            <h2>Reconstruct the Puzzle</h2>
+            <canvas id="puzzle-canvas" width="200" height="200"></canvas>
+        </div>
+    </div>
+    <h2>Puzzle Tray</h2>
+    <div id="puzzle-tray"></div>
+    <p id="status"></p>
+    <h3>Timer: <span id="timer">0</span> seconds</h3>
+    <h3>Moves: <span id="move-counter">0</span></h3>
+
+    <script>
+        const fileInput = document.getElementById('image-upload');
+        const originalImage = document.getElementById('original-image');
+        const puzzleCanvas = document.getElementById('puzzle-canvas');
+        const puzzleTray = document.getElementById('puzzle-tray');
+        const statusText = document.getElementById('status');
+        const timerElement = document.getElementById('timer');
+        const moveCounterElement = document.getElementById('move-counter');
+        const ctx = puzzleCanvas.getContext('2d');
+
+        let puzzlePieces = [];
+        let correctPlacements = 0;
+        let moveCounter = 0;
+        let timer = 0;
+        let timerInterval = null;
+
+        fileInput.addEventListener('change', handleImageUpload);
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function () {
+                const img = new Image();
+                img.onload = function () {
+                    originalImage.src = reader.result;
+                    createPuzzlePieces(img);
+                }
+                img.src = reader.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function createPuzzlePieces(image) {
+            const pieceSize = 100; // Size of each puzzle piece
+            puzzlePieces = [];
+            correctPlacements = 0;
+            moveCounter = 0;
+            timer = 0;
+            clearInterval(timerInterval);
+            moveCounterElement.textContent = '0';
+            timerElement.textContent = '0';
+            puzzleTray.innerHTML = '';
+            statusText.textContent = '';
+
+            // Clear the canvas initially so it is blank until pieces are added
+            ctx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
+
+            // Scale down the image to fit within the 200x200 canvas
+            const scaleX = puzzleCanvas.width / image.width;
+            const scaleY = puzzleCanvas.height / image.height;
+
+            // Draw and extract 4 puzzle pieces at the correct scale
+            for (let y = 0; y < 2; y++) {
+                for (let x = 0; x < 2; x++) {
+                    const canvasPiece = document.createElement('canvas');
+                    canvasPiece.width = pieceSize;
+                    canvasPiece.height = pieceSize;
+                    const pieceCtx = canvasPiece.getContext('2d');
+
+                    // Calculate the source dimensions correctly to avoid zoom-in effect
+                    const sourceX = x * (image.width / 2);
+                    const sourceY = y * (image.height / 2);
+                    const sourceWidth = image.width / 2;
+                    const sourceHeight = image.height / 2;
+
+                    // Draw scaled-down piece onto the piece canvas
+                    pieceCtx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, pieceSize, pieceSize);
+
+                    const piece = { canvas: canvasPiece, x: x * pieceSize, y: y * pieceSize };
+                    puzzlePieces.push(piece);
+
+                    canvasPiece.classList.add('puzzle-piece');
+                    puzzleTray.appendChild(canvasPiece);
+
+                    // Enable dragging for the puzzle pieces
+                    canvasPiece.draggable = true;
+                    canvasPiece.addEventListener('dragstart', onDragStart);
+                }
+            }
+        }
+
+        function onDragStart(event) {
+            const pieceIndex = puzzlePieces.findIndex(piece => piece.canvas === event.target);
+            event.dataTransfer.setData('text/plain', pieceIndex);
+
+            // Start the timer on the first drag action
+            if (timerInterval === null) {
+                timerInterval = setInterval(() => {
+                    timer++;
+                    timerElement.textContent = timer.toString();
+                }, 1000);
+            }
+        }
+
+        puzzleCanvas.addEventListener('dragover', function (event) {
+            event.preventDefault();
+        });
+
+        puzzleCanvas.addEventListener('drop', function (event) {
+            event.preventDefault();
+            const pieceIndex = event.dataTransfer.getData('text/plain');
+            const piece = puzzlePieces[pieceIndex];
+
+            const rect = puzzleCanvas.getBoundingClientRect();
+            const dropX = event.clientX - rect.left;
+            const dropY = event.clientY - rect.top;
+
+            const snappedX = Math.floor(dropX / 100) * 100;
+            const snappedY = Math.floor(dropY / 100) * 100;
+
+            // Check if the piece is dropped in the correct position
+            if (snappedX === piece.x && snappedY === piece.y) {
+                ctx.drawImage(piece.canvas, snappedX, snappedY);
+                correctPlacements++;
+                
+                // Remove the piece from the tray after correct placement
+                piece.canvas.remove();
+
+                checkPuzzleCompletion();
+            } else {
+                statusText.textContent = "Piece placed incorrectly!";
+                statusText.style.color = 'red';
+            }
+
+            // Increment the move counter on every drop action
+            moveCounter++;
+            moveCounterElement.textContent = moveCounter.toString();
+        });
+
+        function checkPuzzleCompletion() {
+            if (correctPlacements === 4) {
+                statusText.textContent = `Puzzle Completed Successfully! Time: ${timer} seconds, Moves: ${moveCounter}`;
+                statusText.style.color = 'green';
+
+                // Stop the timer
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+    </script>
+</body>
+</html>
