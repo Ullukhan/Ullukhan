@@ -18,10 +18,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            background-color: white;
         }
         canvas, img {
             border: 2px solid #ddd;
             margin: 10px;
+            border-radius: 5px;
         }
         #puzzle-tray {
             border: 2px solid #ccc;
@@ -29,15 +34,25 @@
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
+            border-radius: 5px;
+            background-color: #f9f9f9;
         }
         .puzzle-piece {
             border: 1px solid #333;
             cursor: move;
             margin: 5px;
+            transition: transform 0.2s;
+        }
+        .puzzle-piece:hover {
+            transform: scale(1.05);
+            border-color: #666;
         }
         #status {
             font-size: 1.2em;
             color: green;
+        }
+        #difficulty {
+            margin: 20px 0;
         }
     </style>
 </head>
@@ -45,6 +60,17 @@
 
     <h1>Image Puzzle Game</h1>
     <input type="file" id="image-upload" accept="image/*">
+    <div id="difficulty">
+        <label>
+            <input type="radio" name="difficulty" value="easy" checked> Easy (4 pieces)
+        </label>
+        <label>
+            <input type="radio" name="difficulty" value="medium"> Medium (9 pieces)
+        </label>
+        <label>
+            <input type="radio" name="difficulty" value="hard"> Hard (16 pieces)
+        </label>
+    </div>
     <div id="game-container">
         <div>
             <h2>Original Image</h2>
@@ -94,7 +120,21 @@
         }
 
         function createPuzzlePieces(image) {
-            const pieceSize = 100; // Size of each puzzle piece
+            const difficulty = document.querySelector('input[name="difficulty"]:checked').value;
+            let piecesPerSide;
+            switch (difficulty) {
+                case 'easy':
+                    piecesPerSide = 2; // 2x2
+                    break;
+                case 'medium':
+                    piecesPerSide = 3; // 3x3
+                    break;
+                case 'hard':
+                    piecesPerSide = 4; // 4x4
+                    break;
+            }
+            const totalPieces = piecesPerSide * piecesPerSide;
+            const pieceSize = puzzleCanvas.width / piecesPerSide; // Calculate piece size based on grid size
             puzzlePieces = [];
             correctPlacements = 0;
             moveCounter = 0;
@@ -108,23 +148,19 @@
             // Clear the canvas initially so it is blank until pieces are added
             ctx.clearRect(0, 0, puzzleCanvas.width, puzzleCanvas.height);
 
-            // Scale down the image to fit within the 200x200 canvas
-            const scaleX = puzzleCanvas.width / image.width;
-            const scaleY = puzzleCanvas.height / image.height;
-
-            // Draw and extract 4 puzzle pieces at the correct scale
-            for (let y = 0; y < 2; y++) {
-                for (let x = 0; x < 2; x++) {
+            // Draw and extract puzzle pieces at the correct scale
+            for (let y = 0; y < piecesPerSide; y++) {
+                for (let x = 0; x < piecesPerSide; x++) {
                     const canvasPiece = document.createElement('canvas');
                     canvasPiece.width = pieceSize;
                     canvasPiece.height = pieceSize;
                     const pieceCtx = canvasPiece.getContext('2d');
 
-                    // Calculate the source dimensions correctly to avoid zoom-in effect
-                    const sourceX = x * (image.width / 2);
-                    const sourceY = y * (image.height / 2);
-                    const sourceWidth = image.width / 2;
-                    const sourceHeight = image.height / 2;
+                    // Calculate the source dimensions correctly
+                    const sourceX = x * (image.width / piecesPerSide);
+                    const sourceY = y * (image.height / piecesPerSide);
+                    const sourceWidth = image.width / piecesPerSide;
+                    const sourceHeight = image.height / piecesPerSide;
 
                     // Draw scaled-down piece onto the piece canvas
                     pieceCtx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, pieceSize, pieceSize);
@@ -168,8 +204,8 @@
             const dropX = event.clientX - rect.left;
             const dropY = event.clientY - rect.top;
 
-            const snappedX = Math.floor(dropX / 100) * 100;
-            const snappedY = Math.floor(dropY / 100) * 100;
+            const snappedX = Math.floor(dropX / (puzzleCanvas.width / Math.sqrt(puzzlePieces.length))) * (puzzleCanvas.width / Math.sqrt(puzzlePieces.length));
+            const snappedY = Math.floor(dropY / (puzzleCanvas.height / Math.sqrt(puzzlePieces.length))) * (puzzleCanvas.height / Math.sqrt(puzzlePieces.length));
 
             // Check if the piece is dropped in the correct position
             if (snappedX === piece.x && snappedY === piece.y) {
@@ -191,7 +227,7 @@
         });
 
         function checkPuzzleCompletion() {
-            if (correctPlacements === 4) {
+            if (correctPlacements === puzzlePieces.length) {
                 statusText.textContent = `Puzzle Completed Successfully! Time: ${timer} seconds, Moves: ${moveCounter}`;
                 statusText.style.color = 'green';
 
